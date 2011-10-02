@@ -1,19 +1,48 @@
 some sig Hoare {
   pre, post: set Prop,
-  prog: pre -> post,
+  prog: Prop -> Prop,
 }
 {
+  -- def. of Hoare triple
   all p: pre | p.prog in post
 }
-
 sig Prop {}
-sig A, B, C extends Prop {}
 
+-- test run
+pred show(h: Hoare) {
+  some p: Prop | p.(h.prog) in (h.post) and some p.(h.prog) and p not in h.pre
+}
+run show
+run { some h: Hoare | some h.prog and some (Prop - h.post) and some h.post }
+
+-- empty program = abort
+pred isAbort (h: Hoare) { 
+  some pre and no post
+}
+run isAbort
+
+abortIsEmpty: check {
+  all h: Hoare | isAbort[h] => (no h.pre & h.prog.univ or no h.prog)
+}
+
+-- (liberal) weakest precondition
+fun wlp(h: Hoare): set iden {
+  dom[(Prop - (h.prog.(Prop - h.post))) <: iden]
+}
+run wlp
+
+wlpMeets: check {
+  all h: Hoare | no wlp[h].(h.prog).(Prop - h.post)
+} for 10
+wlpIsReallyWeak: check {
+  all h: Hoare | h.pre in wlp[h].univ
+} for 10
+
+-- domain
 fun dom (r: univ -> univ): univ -> univ {
   r.univ <: iden
 }
-
-run {some prog #pre > 2 }
+run dom
 
 -- definitions of domain
 defOfDomain1: check {
@@ -38,7 +67,6 @@ monotonicity: check {
 }
 decomposition: check {
   all a, b: univ -> univ | dom[a.b] in dom[a.(dom[b])]
---  all a: A -> B, b: B -> C | dom[a.b] in dom[a.(dom[b])]
 }
 import_export: check {
   all a: univ -> univ, p: set iden |  dom[p.a] = p.(dom[a])
