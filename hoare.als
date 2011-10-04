@@ -1,23 +1,38 @@
-some sig Hoare {
+sig Hoare {
   pre, post: set Prop,
   prog: Prop -> Prop,
 }
 {
   -- def. of Hoare triple
-  all p: pre | p.prog in post
+  hoare [pre, prog, post]
 }
 sig Prop {}
+
+-- KAD style definition of Hoare triple
+pred hoare (pre: set Prop, prog: Prop -> Prop, post: set Prop) {
+  cod[pre.toKA.prog] in post.toKA
+}
 
 -- abort: everything goes absurd
 sig Abort extends Hoare {}
 {
   no prog
 }
+-- empty program = abort
+pred isAbort (h: Hoare) { 
+  some h.pre and no h.post
+}
+run isAbort
+
+abortIsEmpty: check {
+  all h: Hoare | isAbort[h] => no h.pre.toKA.(h.prog)
+}
 
 -- skip: do nothing
 sig Skip extends Hoare {}
 {
   prog = Prop.toKA
+  pre = post
 }
 
 -- Boolean Algebra to Kleene Algebra
@@ -107,31 +122,36 @@ expandWhileOnce: check {
   all b: Prop, h: Hoare | 
     let w = while [b, h] | 
     let w' = if [b, h.next[w], Skip] | 
-      h.pre = b & h.post
-        => all p: h.post | p.(w'.prog) in neg[b] & h.post
-}
+      hoare [w.pre, w'.prog, w.post] and hoare [w'.pre, w.prog, w'.post]
+} for 6
 
 -- negation
 fun neg (b: Prop): Prop {
   Prop - b
 }
 
--- test run
-pred show(h: Hoare) {
-  some p: Prop | p.(h.prog) in (h.post) and some p.(h.prog) and p not in h.pre
-}
-run show
-run { some h: Hoare | some h.prog and some (Prop - h.post) and some h.post }
-
--- empty program = abort
-pred isAbort (h: Hoare) { 
-  some pre and no post
-}
-run isAbort
-
-abortIsEmpty: check {
-  all h: Hoare | isAbort[h] => (no h.pre & h.prog.univ or no h.prog)
-}
+-- lemmas ([Moeller&Struth03] Lemma 6.1)
+lemma_i: check {
+  all h: Hoare |
+    h.pre.toKA.(h.prog) = h.prog.(h.pre.toKA) => hoare[h.pre, h.prog, h.post]
+} for 10
+lemma_ii: check {
+  all h1, h2: Hoare | 
+    h1.pre = h2.pre => hoare[h1.pre, h1.prog + h2.prog, h1.post + h2.post]
+} for 10
+lemma_iii: check {
+  all h1, h2: Hoare | 
+    h1.post = h2.post and h1.prog = h2.prog
+      => hoare[h1.pre + h2.pre, h1.prog, h1.post]  
+} for 10
+lemma_iv: check {
+  all h1, h2: Hoare | 
+    h1.prog = h2.prog => hoare[h1.pre & h2.pre, h1.prog, h1.post & h2.post] 
+} for 10
+lemma_v: check {
+  all h: Hoare, p: Prop |
+    p.toKA.(h.prog) = h.prog.(p.toKA) => hoare [p & h.pre, h.prog, p & h.post]
+} for 10
 
 -- (liberal) weakest precondition
 fun wlp(h: Hoare): set iden {
@@ -151,6 +171,11 @@ fun dom (r: univ -> univ): univ -> univ {
   r.univ <: iden
 }
 run dom
+
+-- codomain
+fun cod (r: univ -> univ): univ -> univ {
+  dom[~r]
+}
 
 -- definitions of domain
 defOfDomain1: check {
