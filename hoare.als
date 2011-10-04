@@ -8,6 +8,90 @@ some sig Hoare {
 }
 sig Prop {}
 
+lone sig Skip extends Hoare {}
+{
+  prog = Prop <: iden
+}
+
+-- structural rules
+
+-- sequential composition
+fun next (h1, h2: Hoare): Hoare {
+  { h: Hoare {
+    h.pre = h1.pre 
+    h.post = h2.post
+    h.prog = (h1.prog).(h2.prog)
+  }}
+}
+pred isNext (disj h, h1, h2: Hoare) {
+  h = h1.next[h2]
+  some h.pre
+  some h.prog
+  h not in h1 + h2
+}
+run isNext for 5
+
+-- condition
+fun if (b: Prop, thn, els: Hoare): Hoare {
+  { h: Hoare {
+    -- then clause
+    thn.pre = b & h.pre
+    thn.post = h.post
+    -- else clause
+    els.pre = neg[b] & h.pre
+    els.post = h.post
+  }}
+}
+pred isIf (disj h, thn, els: Hoare) {
+  some b: Prop | h = if [b, thn, els]
+  some h.pre & dom[h.prog].univ
+  some thn.pre & dom[h.prog].univ
+  some els.pre & dom[h.prog].univ
+  some h.prog
+}
+run isIf
+
+-- while loop (for partial model)
+fun while (b: Prop, inner: Hoare): Hoare {
+  { h: Hoare {
+    -- precondition
+    inner.pre = h.pre & b
+    -- postcondition
+    inner.post = h.pre
+    h.post = inner.post & neg[b]
+
+    -- relational model
+    ---h.prog = (Prop <: *(inner.prog)) :> neg[b]
+  }}
+}
+pred isWhile (b: Prop, h, hw: Hoare) {
+  hw = while [b, h]
+  some hw.pre & dom[h.prog].univ
+  some h.pre & dom[h.prog].univ
+  some hw.prog
+}
+run isWhile
+
+-- Is while loop equivalent to RT closure?
+whileEquivClosure: check {
+  all h, hw: Hoare | some b: Prop | hw.prog = *((b <: iden).(h.prog)) :> neg[b] => hw = while [b, h]
+}
+
+-- Expand a while-loop once 
+
+expandWhileOnce: check {
+  all b: Prop, h: Hoare | 
+    let w = while [b, h] | 
+    let w' = if [b, h.next[w], Skip] | 
+      h.pre = b & h.post and some w and some w'
+        => all p: h.post | p.(w'.prog) in neg[b] & h.post
+}
+
+-- negation
+fun neg (b: Prop): Prop {
+  Prop - b
+}
+
 -- test run
 pred show(h: Hoare) {
   some p: Prop | p.(h.prog) in (h.post) and some p.(h.prog) and p not in h.pre
