@@ -8,10 +8,40 @@ some sig Hoare {
 }
 sig Prop {}
 
-lone sig Skip extends Hoare {}
+-- abort: everything goes absurd
+sig Abort extends Hoare {}
 {
-  prog = Prop <: iden
+  no prog
 }
+
+-- skip: do nothing
+sig Skip extends Hoare {}
+{
+  prog = Prop.toKA
+}
+
+-- Boolean Algebra to Kleene Algebra
+fun toKA (p: Prop): Prop -> Prop {
+  p <: iden
+}
+
+-- order between Hoare triples
+pred lte (h1, h2: Hoare) {
+  h2.pre in h1.pre
+  h1.post in h2.post
+}
+pred showLte (disj h1, h2: Hoare) {
+  lte [h1, h2]
+  nonTrivial[h1]
+  nonTrivial[h2]
+}
+run showLte
+
+-- non-trivial triple
+pred nonTrivial (h: Hoare) {
+  some h.pre.toKA & dom[h.prog]
+}
+run nonTrivial
 
 -- structural rules
 
@@ -32,7 +62,7 @@ pred isNext (disj h, h1, h2: Hoare) {
 run isNext for 5
 
 -- condition
-fun if (b: Prop, thn, els: Hoare): Hoare {
+fun if (b: set Prop, thn, els: Hoare): Hoare {
   { h: Hoare {
     -- then clause
     thn.pre = b & h.pre
@@ -40,19 +70,20 @@ fun if (b: Prop, thn, els: Hoare): Hoare {
     -- else clause
     els.pre = neg[b] & h.pre
     els.post = h.post
+    -- program
+    h.prog = (b.toKA).(thn.prog) + (neg[b].toKA).(els.prog)
   }}
 }
 pred isIf (disj h, thn, els: Hoare) {
   some b: Prop | h = if [b, thn, els]
-  some h.pre & dom[h.prog].univ
-  some thn.pre & dom[h.prog].univ
-  some els.pre & dom[h.prog].univ
-  some h.prog
+  nonTrivial[h]
+  nonTrivial[thn]
+  nonTrivial[els]
 }
 run isIf
 
 -- while loop (for partial model)
-fun while (b: Prop, inner: Hoare): Hoare {
+fun while (b: set Prop, inner: Hoare): Hoare {
   { h: Hoare {
     -- precondition
     inner.pre = h.pre & b
@@ -61,29 +92,22 @@ fun while (b: Prop, inner: Hoare): Hoare {
     h.post = inner.post & neg[b]
 
     -- relational model
-    ---h.prog = (Prop <: *(inner.prog)) :> neg[b]
+    h.prog = *((b.toKA).(inner.prog)).(neg[b].toKA)
   }}
 }
-pred isWhile (b: Prop, h, hw: Hoare) {
+pred showWhile (b: set Prop, h, hw: Hoare) {
   hw = while [b, h]
-  some hw.pre & dom[h.prog].univ
-  some h.pre & dom[h.prog].univ
-  some hw.prog
+  nonTrivial[h]
+  nonTrivial[hw]
 }
-run isWhile
-
--- Is while loop equivalent to RT closure?
-whileEquivClosure: check {
-  all h, hw: Hoare | some b: Prop | hw.prog = *((b <: iden).(h.prog)) :> neg[b] => hw = while [b, h]
-}
+run showWhile for 5
 
 -- Expand a while-loop once 
-
 expandWhileOnce: check {
   all b: Prop, h: Hoare | 
     let w = while [b, h] | 
     let w' = if [b, h.next[w], Skip] | 
-      h.pre = b & h.post and some w and some w'
+      h.pre = b & h.post
         => all p: h.post | p.(w'.prog) in neg[b] & h.post
 }
 
@@ -111,15 +135,15 @@ abortIsEmpty: check {
 
 -- (liberal) weakest precondition
 fun wlp(h: Hoare): set iden {
-  dom[(Prop - (h.prog.(Prop - h.post))) <: iden]
+  dom[neg[h.prog.(neg[h.post])].toKA]
 }
 run wlp
 
 wlpMeets: check {
-  all h: Hoare | no wlp[h].(h.prog).(Prop - h.post)
+  all h: Hoare | no wlp[h].(h.prog).(neg[h.post])
 } for 10
 wlpIsReallyWeak: check {
-  all h: Hoare | h.pre in wlp[h].univ
+  all h: Hoare | h.pre.toKA in wlp[h]
 } for 10
 
 -- domain
